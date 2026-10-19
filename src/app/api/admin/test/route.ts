@@ -10,6 +10,7 @@ import { testAnnasArchiveKey } from '@/lib/annas-test';
 import { getServerSession } from 'next-auth/next';
 import { getAuthOptions } from '@/app/api/auth/[...nextauth]/options';
 import { authFromSettings, metronGet } from '@/lib/metron/client';
+import { transmissionRpc } from '@/lib/transmission';
 
 export async function POST(request: Request) {
   let type = 'unknown';
@@ -274,6 +275,18 @@ export async function POST(request: Request) {
                 throw new Error("Authentication failed. Check username/password. (Careful: several failed attempts in a row will get this IP temporarily banned by qBittorrent.)");
             }
             throw new Error("qBittorrent answered the login but returned no session cookie — a reverse proxy in front of qBittorrent may be stripping cookies.");
+        }
+        else if (clientType === 'transmission') {
+            const realPass = pass === '********'
+                ? await decryptSecret((await prisma.downloadClient.findFirst({ where: { url: config.url } }))?.pass ?? null) || ''
+                : pass;
+            const result = await transmissionRpc<{ version: string; 'rpc-version': number }>(
+                { url: cleanUrl, user, pass: realPass }, 'session-get', {}, headers, 5000,
+            );
+            if (!result?.version || !(result['rpc-version'] >= 16)) {
+                throw new Error('Transmission 3.0 or newer is required for category labels.');
+            }
+            return NextResponse.json({ success: true, message: `Transmission Connected! (v${result.version})` });
         }
         else if (clientType === 'sab') {
             const realApiKey = (apiKey === '********')

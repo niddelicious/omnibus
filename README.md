@@ -723,7 +723,8 @@ Settings are organized into **8 task-focused tabs** — Metadata, Library & File
 </p>
 
 * **High-Performance Architecture:** Built to handle massive terabyte-scale libraries. Features an optimized OPDS feed, asynchronous streaming cipher engines for backups, and B-Tree indexed database lookups.
-* **Download Client Integration:** Connects seamlessly with qBittorrent, Deluge, SABnzbd, and NZBGet. Supports complex Docker remote-path mapping to ensure files move perfectly between containers.
+* **Download Client Integration:** Connects seamlessly with qBittorrent, Deluge, Transmission, SABnzbd, and NZBGet. Supports complex Docker remote-path mapping to ensure files move perfectly between containers.
+
 * **3rd-Party File Hosters:** Native support for bypassing landing pages and downloading directly from MediaFire, Mega, Pixeldrain, Rootz, Vikingfile, and Terabox. Supports injecting premium API keys/session cookies to bypass bandwidth limits.
 * **Anna's Archive Search Source:** Search Anna's Archive (the shadow-library aggregator) as a first-class source alongside GetComics and your indexers. Use it in interactive search (no API key required — gated files drop to the manual queue) or prioritize it as an automated source (requires a premium API key plus a passing connection test). Includes a configurable mirror base URL with automatic failover as Anna's Archive rotates domains.
 * **Selectable Cloudflare Solver:** Route requests through a FlareSolverr, Byparr, **or** Trawl container to seamlessly bypass Cloudflare protection (403 Forbidden errors) on sites like GetComics, with a configurable solve timeout. A built-in circuit breaker detects a wedged/unresponsive solver (pausing solve attempts and raising a health-panel alert with the fix) instead of silently grinding every download into the manual queue. The download pipeline drives the solver the way battle-tested tools do — reusing solver sessions, streaming from the solver's landed URL, and resuming partial transfers — so gated links that used to need hand-holding now usually finish on their own. When a link still stays gated, Omnibus holds it for manual download — and you can hand the file back via Manual File Upload. Run any of the three solvers as its own container and point the Cloudflare Solver URL in Settings at it.
@@ -767,6 +768,15 @@ Settings are organized into **8 task-focused tabs** — Metadata, Library & File
 * **Scheduled Tasks (Cron):** Configure how often Omnibus should scan your disk for new files, refresh metadata, embed ComicInfo.xml, export series.json, convert archives, back up the database, or check indexers for missing requested issues — each job with its own cadence and a manual "Run Now" trigger.
 * **Automated Backups & One-Click Restore:** Scheduled, encrypted database backups on your chosen day and cadence, with a browser-based restore that merges a backup file straight back into a running instance.
 * **Live System Logs:** A built-in log viewer to easily troubleshoot API limits, failed downloads, or matching errors.
+
+### Transmission
+
+Add Transmission under **Admin → Settings → Downloads** (or during setup). Transmission **3.0+** is required for labels. Enable RPC access and enter `http://host:9091`; Omnibus uses `/transmission/rpc` by default. A full RPC URL is also accepted for reverse proxies or custom RPC paths. Supply the RPC username/password if authentication is enabled, and allow Omnibus through Transmission's RPC IP/host whitelist.
+
+The download category becomes a Transmission label: the first comma-separated label is used for comics, the optional second for manga. Only torrents with a configured label appear in Omnibus. Labels are created automatically; they do not change Transmission's download directory. Set the client's **Local Path** to the completed download directory as seen by Omnibus, and configure **Remote Path** when container paths differ.
+
+Magnet links, torrent-file uploads, progress tracking, and cancellation (including deleting downloaded data) are supported. Seed-ratio limits are applied per torrent. Transmission's RPC API has no total seeding-time limit; Omnibus does not substitute its different *idle* seeding limit. Other seeding behavior follows Transmission's session settings. Imported torrents retain their source files for seeding.
+
 ---
 
 ## Additional Screenshots

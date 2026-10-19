@@ -148,6 +148,13 @@ describe('Settings tabs (Phase 1 reorganization)', () => {
         expect(screen.getByText(/Flag stalled requests/i)).toBeInTheDocument();
     });
 
+    it('DownloadsTab offers Transmission setup', () => {
+        const bag = mkBag();
+        render(<DownloadsTab s={bag} />);
+        fireEvent.click(screen.getByText('Transmission'));
+        expect(bag.openClientSetup).toHaveBeenCalledWith('transmission');
+    });
+
     it('DiscoveryTab unifies the manga story: visibility, request gate, and detection lists', () => {
         render(<DiscoveryTab s={mkBag()} />);
         expect(screen.getByText(/Manga Visibility/i)).toBeInTheDocument();

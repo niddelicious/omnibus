@@ -25,7 +25,7 @@ Built with Next.js 15, Tailwind v4, Prisma, and a serverless SQLite engine, Omni
 ## Core Features
 
   * **Dual Metadata Engines:** Choose between ComicVine (default) or Metron.Cloud as your primary source to automatically pull high-res covers, synopses, and creator credits. 
-  * **All-In-One Pipeline:** Discover new releases, request missing issues, send them to your download clients (qBittorrent, SABnzbd, etc.), and read them—all from one interface.
+  * **All-In-One Pipeline:** Discover new releases, request missing issues, send them to your download clients (qBittorrent, Transmission, SABnzbd, etc.), and read them—all from one interface.
   * **Native Web Reader:** Blazing fast, zero-friction browser reading for `.cbz`, `.cbr`/`.rar` (read natively by the Rust engine — auto-conversion to cbz stays optional), and `.epub` archives with LTR, RTL (Manga), and Webtoon scroll support.
   * **Automated Organization & Smart Matcher:** Auto-extracts, renames, and routes downloaded files to your mapped library directories. Unmatched loose files can be instantly organized using the AI-assisted Smart Matcher with support for both ComicVine and Metron IDs.
   * **Smart Reading Lists:** Instantly auto-build reading orders by pasting a ComicVine or Metron Event ID. Easily import external lists from CBL files, CSVs (League of Comic Geeks), AniList, or MyAnimeList.

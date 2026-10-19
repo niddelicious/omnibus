@@ -769,8 +769,8 @@ export default function SettingsPage() {
   }
 
   const openClientSetup = (type: ClientConfig['type']) => {
-    const protocols: Record<string, 'Torrent' | 'Usenet'> = { qbit: 'Torrent', deluge: 'Torrent', sab: 'Usenet', nzbget: 'Usenet' };
-    const names: Record<string, string> = { qbit: 'qBittorrent', deluge: 'Deluge', sab: 'SABnzbd', nzbget: 'NZBGet' };
+    const protocols: Record<string, 'Torrent' | 'Usenet'> = { qbit: 'Torrent', deluge: 'Torrent', transmission: 'Torrent', sab: 'Usenet', nzbget: 'Usenet' };
+    const names: Record<string, string> = { qbit: 'qBittorrent', deluge: 'Deluge', transmission: 'Transmission', sab: 'SABnzbd', nzbget: 'NZBGet' };
     setTestResults(prev => ({ ...prev, clients: null }));
     setEditingClient({
         id: `tmp_${Math.random().toString(36).substr(2, 9)}`,
@@ -1065,12 +1065,15 @@ export default function SettingsPage() {
                     <div className="grid gap-2">
                         <Label className="text-foreground font-semibold">Server URL</Label>
                         <Input value={editingClient.url} onChange={e => updateEditingClient('url', e.target.value)} placeholder="http://192.168.1.100:8080" className="h-12 sm:h-10 bg-muted/20 border-border text-foreground" />
+                        {editingClient.type === 'transmission' && (
+                            <p className="text-[11px] text-muted-foreground">Transmission 3.0+. Use http://host:9091 or a full RPC URL (http://host:9091/transmission/rpc). Username/password are optional when RPC authentication is disabled. Ratio limits are supported; total seeding-time limits are not.</p>
+                        )}
                     </div>
 
                     <div className="grid gap-2">
                         <Label className="text-foreground font-semibold">Download Category / Label</Label>
                         <Input value={editingClient.category || ""} onChange={e => updateEditingClient('category', e.target.value)} placeholder="e.g. comics, manga" className="h-12 sm:h-10 bg-muted/20 border-border text-foreground" />
-                        <p className="text-[11px] text-muted-foreground">Comma-separated. The <strong>first</strong> category is used for comics; add a <strong>second</strong> for manga (e.g. <code>comics, manga</code>). Both are tracked in the active-downloads list. <strong className="text-orange-500">Categories/labels MUST exist in your client</strong> (qBittorrent auto-creates them; Deluge needs the Label plugin).</p>
+                        <p className="text-[11px] text-muted-foreground">Comma-separated. The <strong>first</strong> category is used for comics; add a <strong>second</strong> for manga (e.g. <code>comics, manga</code>). Both are tracked in the active-downloads list. <strong className="text-orange-500">Categories/labels MUST exist in your client</strong> (qBittorrent and Transmission auto-create them; Deluge needs the Label plugin).</p>
                     </div>
 
                     <div className="border-t border-border pt-4 mt-2">
@@ -1093,7 +1096,7 @@ export default function SettingsPage() {
                         </p>
                     </div>
 
-                    {['qbit', 'deluge', 'nzbget'].includes(editingClient.type) && (
+                    {['qbit', 'deluge', 'nzbget', 'transmission'].includes(editingClient.type) && (
                         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mt-2 border-t border-border pt-4">
                             <div className="grid gap-2"><Label className="text-foreground font-semibold">User</Label><Input value={editingClient.user} onChange={e => updateEditingClient('user', e.target.value)} className="h-12 sm:h-10 bg-muted/20 border-border text-foreground" /></div>
                             <div className="grid gap-2"><Label className="text-foreground font-semibold">Pass</Label><Input type="password" value={editingClient.pass} onChange={e => updateEditingClient('pass', e.target.value)} className="h-12 sm:h-10 bg-muted/20 border-border text-foreground" /></div>

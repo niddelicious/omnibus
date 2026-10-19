@@ -10,6 +10,7 @@ const mocks = vi.hoisted(() => ({
     axiosPost: vi.fn(),
     findManyHeaders: vi.fn(),
     settingFindUnique: vi.fn(),
+    findManyClients: vi.fn(),
     log: vi.fn()
 }));
 
@@ -25,6 +26,7 @@ vi.mock('axios', () => ({
 vi.mock('@/lib/db', () => ({
     prisma: {
         customHeader: { findMany: mocks.findManyHeaders },
+        downloadClient: { findMany: mocks.findManyClients },
         systemSetting: { findUnique: mocks.settingFindUnique }
     }
 }));
@@ -303,6 +305,116 @@ describe('Issue #197: Prowlarr NZB handoff fetches content instead of handing NZ
         expect(mocks.axiosGet).not.toHaveBeenCalled();
         const rpc = mocks.axiosPost.mock.calls[0][1];
         expect(rpc.params[1]).toBe(PROWLARR_DL);
+    });
+});
+
+describe('Transmission download lifecycle', () => {
+    const client = {
+        type: 'transmission', name: 'Transmission', url: 'http://transmission:9091',
+        user: 'admin', pass: 'secret', category: 'comics,manga',
+    };
+    const added = { status: 200, headers: {}, data: { result: 'success', arguments: { 'torrent-added': { hashString: 'abc123' } } } };
+    const success = { status: 200, headers: {}, data: { result: 'success', arguments: {} } };
+
+    beforeEach(() => {
+        mocks.axiosPost.mockReset();
+        mocks.axiosGet.mockReset();
+        mocks.findManyHeaders.mockResolvedValue([{ key: 'X-Custom', value: 'value' }]);
+        mocks.settingFindUnique.mockResolvedValue(null);
+        mocks.findManyClients.mockResolvedValue([client]);
+        mocks.axiosPost.mockResolvedValue(success);
+    });
+
+    it('submits magnets, assigns the comic label and sets a seed ratio', async () => {
+        mocks.axiosPost.mockResolvedValueOnce(added);
+        expect(await DownloadService.addDownload(client, 'magnet:?xt=urn:btih:abc123', 'Batman #1', 60, 2)).toEqual({ success: true });
+        expect(mocks.axiosPost.mock.calls[0]).toMatchObject([
+            'http://transmission:9091/transmission/rpc',
+            { method: 'torrent-add', arguments: { filename: 'magnet:?xt=urn:btih:abc123', labels: ['comics'], paused: false } },
+            { timeout: 30000, headers: { 'X-Custom': 'value' } },
+        ]);
+        expect(mocks.axiosPost.mock.calls[1][1]).toEqual({
+            method: 'torrent-set', arguments: { ids: ['abc123'], labels: ['comics'], seedRatioLimit: 2, seedRatioMode: 1 },
+        });
+        expect(loggerLog).toHaveBeenCalledWith(expect.stringContaining('Total seeding-time limits are not supported'), 'warn');
+    });
+
+    it('uploads fetched torrent bytes as base64 metainfo and routes manga to its label', async () => {
+        mocks.axiosGet.mockResolvedValue({ data: Buffer.from('torrent bytes') });
+        mocks.axiosPost.mockResolvedValueOnce(added);
+        await DownloadService.addDownload(client, 'https://indexer.example/file.torrent', 'Manga', 0, 0, true);
+        expect(mocks.axiosPost.mock.calls[0][1]).toEqual({
+            method: 'torrent-add', arguments: { metainfo: Buffer.from('torrent bytes').toString('base64'), labels: ['manga'], paused: false },
+        });
+        expect(mocks.axiosPost.mock.calls[1][1].arguments).not.toHaveProperty('seedRatioMode');
+    });
+
+    it('hands the URL to Transmission when a torrent cannot be prefetched', async () => {
+        mocks.axiosGet.mockRejectedValue(new Error('Indexer offline'));
+        mocks.axiosPost.mockResolvedValueOnce(added);
+        await DownloadService.addDownload(client, 'https://indexer.example/file.torrent', 'Comic', 0);
+        expect(mocks.axiosPost.mock.calls[0][1].arguments).toHaveProperty('filename', 'https://indexer.example/file.torrent');
+    });
+
+    it('labels existing duplicate torrents so they remain visible to monitoring', async () => {
+        mocks.axiosPost.mockResolvedValueOnce({
+            ...added, data: { result: 'success', arguments: { 'torrent-duplicate': { hashString: 'existing' } } },
+        });
+        await DownloadService.addDownload(client, 'magnet:?xt=urn:btih:existing', 'Comic', 0);
+        expect(mocks.axiosPost.mock.calls[1][1]).toEqual({
+            method: 'torrent-set', arguments: { ids: ['existing'], labels: ['comics'] },
+        });
+    });
+
+    it('throws on add failure instead of logging success', async () => {
+        mocks.axiosPost.mockResolvedValueOnce({ status: 200, data: { result: 'invalid torrent' } });
+        await expect(DownloadService.addDownload(client, 'magnet:?xt=bad', 'Comic', 0)).rejects.toThrow('invalid torrent');
+        expect(loggerLog).not.toHaveBeenCalledWith(expect.stringContaining('SUCCESS'), 'success');
+    });
+
+    it('rejects an add response without an added/duplicate torrent', async () => {
+        await expect(DownloadService.addDownload(client, 'magnet:?xt=bad', 'Comic', 0)).rejects.toThrow('did not return an added torrent');
+    });
+
+    it('surfaces failures applying labels or ratio limits', async () => {
+        mocks.axiosPost.mockResolvedValueOnce(added).mockResolvedValueOnce({ status: 200, data: { result: 'invalid argument' } });
+        await expect(DownloadService.addDownload(client, 'magnet:?xt=abc', 'Comic', 0, 2)).rejects.toThrow('torrent-set failed');
+    });
+
+    it('removes by stable hash and deletes local data', async () => {
+        expect(await DownloadService.removeDownload(client, 'abc123')).toBe(true);
+        expect(mocks.axiosPost.mock.calls[0][1]).toEqual({
+            method: 'torrent-remove', arguments: { ids: ['abc123'], 'delete-local-data': true },
+        });
+    });
+
+    it('does not report successful removal when RPC fails', async () => {
+        mocks.axiosPost.mockResolvedValueOnce({ status: 200, data: { result: 'permission denied' } });
+        expect(await DownloadService.removeDownload(client, 'abc123')).toBe(false);
+        expect(loggerLog).toHaveBeenCalledWith(expect.stringContaining('permission denied'), 'error');
+    });
+
+    it('refuses to remove without an ID', async () => {
+        expect(await DownloadService.removeDownload(client, '')).toBe(false);
+        expect(mocks.axiosPost).not.toHaveBeenCalled();
+    });
+
+    it('includes Transmission torrents in the background monitor', async () => {
+        mocks.axiosPost.mockResolvedValueOnce({
+            ...success, data: { result: 'success', arguments: { torrents: [{
+                hashString: 'abc123', name: 'Batman #1', labels: ['comics'],
+                percentDone: 1, status: 6, totalSize: 1024, error: 0,
+            }] } },
+        });
+        expect(await DownloadService.getAllActiveDownloads()).toEqual([
+            expect.objectContaining({ id: 'abc123', progress: '100.0', clientName: 'Transmission', status: 'Seeding' }),
+        ]);
+    });
+
+    it('logs polling failures rather than silently ignoring a broken client', async () => {
+        mocks.axiosPost.mockRejectedValueOnce(new Error('Transmission unavailable'));
+        expect(await DownloadService.getAllActiveDownloads()).toEqual([]);
+        expect(loggerLog).toHaveBeenCalledWith(expect.stringContaining('Transmission unavailable'), 'warn');
     });
 });
 

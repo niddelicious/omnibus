@@ -13,6 +13,7 @@ import { decryptSecret } from './encryption';
 import { assertSafeFetchUrl, assertSafeRedirect, isTrustedConfiguredOrigin } from './utils/ssrf';
 import { looksLikeHtmlPage } from './utils/content-sniff';
 import { ENGINE_URL, engineHeaders, engineFetchLong } from '@/lib/engine';
+import { getTransmissionDownloads, transmissionRpc } from './transmission';
 
 async function getNetworkHeaders() {
     const customHeaders = await prisma.customHeader.findMany();
@@ -160,6 +161,28 @@ export const DownloadService = {
           ...baseConfig, headers: { ...authHeaders, ...form.getHeaders() }
         });
       }
+      else if (client.type === 'transmission') {
+        const result = await transmissionRpc<{
+            'torrent-added'?: { hashString: string };
+            'torrent-duplicate'?: { hashString: string };
+        }>(client, 'torrent-add', {
+            ...(fileBuffer ? { metainfo: fileBuffer.toString('base64') } : { filename: downloadUrl }),
+            labels: [primaryCategory],
+            paused: false,
+        }, baseConfig.headers, baseConfig.timeout);
+        const torrent = result?.['torrent-added'] || result?.['torrent-duplicate'];
+        if (!torrent?.hashString) throw new Error('Transmission did not return an added torrent.');
+        const options: Record<string, unknown> = { ids: [torrent.hashString], labels: [primaryCategory] };
+        if (seedRatio > 0) {
+            options.seedRatioLimit = seedRatio;
+            options.seedRatioMode = 1;
+        }
+        // Also label duplicates: torrent-add does not change an existing torrent's labels.
+        await transmissionRpc(client, 'torrent-set', options, baseConfig.headers, baseConfig.timeout);
+        if (seedTimeLimit > 0) {
+            Logger.log('[Transmission] Total seeding-time limits are not supported by its RPC API; using the configured ratio and Transmission session defaults.', 'warn');
+        }
+      }
       else if (client.type === 'deluge') {
         const authRes = await axios.post(`${cleanUrl}/json`, { method: "auth.login", params: [client.pass], id: 1 }, baseConfig);
         const cookie = authRes.headers['set-cookie'];
@@ -263,6 +286,12 @@ export const DownloadService = {
                   params: { mode: 'history', name: 'delete', value: downloadId, del_files: 1, apikey: client.apiKey, output: 'json' },
                   ...baseConfig
               }).catch(() => {});
+          }
+          else if (client.type === 'transmission') {
+              if (!downloadId.trim()) throw new Error('Transmission torrent ID is required for removal.');
+              await transmissionRpc(client, 'torrent-remove', {
+                  ids: [downloadId], 'delete-local-data': true,
+              }, baseConfig.headers, baseConfig.timeout);
           }
           else if (client.type === 'deluge') {
               const authRes = await axios.post(`${cleanUrl}/json`, { method: "auth.login", params: [client.pass], id: 1 }, baseConfig);
@@ -564,6 +593,9 @@ export const DownloadService = {
               status: t.state, clientName: client.name, size: (t.size / 1024 / 1024).toFixed(2) + " MB"
             })));
           }
+        }
+        else if (client.type === 'transmission') {
+            downloads.push(...await getTransmissionDownloads(client, baseHeaders));
         }
         else if (client.type === 'deluge') {
             const authRes = await axios.post(`${cleanUrl}/json`, { method: "auth.login", params: [client.pass], id: 1 }, { headers: baseHeaders, timeout: 15000 });

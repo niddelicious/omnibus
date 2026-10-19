@@ -6,6 +6,7 @@ import { Logger } from '@/lib/logger';
 import { getErrorMessage } from '@/lib/utils/error';
 import { decryptSecret } from '@/lib/encryption';
 import { qbitAuthHeaders } from '@/lib/download-clients';
+import { getTransmissionDownloads } from '@/lib/transmission';
 import { getServerSession } from 'next-auth/next';
 import { getAuthOptions } from '@/app/api/auth/[...nextauth]/options';
 
@@ -69,6 +70,9 @@ export async function GET() {
                 }));
                 allDownloads.push(...mapped);
             }
+            else if (client.type === 'transmission') {
+                allDownloads.push(...await getTransmissionDownloads(client, headers));
+            }
             else if (client.type === 'deluge') {
                 const authRes = await axios.post(`${cleanUrl}/json`, { method: "auth.login", params: [client.pass], id: 1 }, { headers, timeout: 15000 });
                 const cookie = authRes.headers['set-cookie'];
@@ -128,8 +132,8 @@ export async function GET() {
                     }
                 } catch (e) { Logger.log(`[Active Downloads] Failed to fetch NZBGet history`, 'warn'); }
             }
-        } catch (e: any) {
-            Logger.log(`[Active Downloads] ${client.name} failed to respond or timed out. Skipping.`, 'warn');
+        } catch (e: unknown) {
+            Logger.log(`[Active Downloads] ${client.name} failed to respond or timed out: ${getErrorMessage(e)}. Skipping.`, 'warn');
             continue; 
         }
     }

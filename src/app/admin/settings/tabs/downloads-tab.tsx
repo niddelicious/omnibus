@@ -38,6 +38,7 @@ export function DownloadsTab({ s }: { s: SettingsBag }) {
                                 { id: 'qbit', name: 'qBittorrent', protocol: 'Torrent' },
                                 { id: 'sab', name: 'SABnzbd', protocol: 'Usenet' },
                                 { id: 'deluge', name: 'Deluge', protocol: 'Torrent' },
+                                { id: 'transmission', name: 'Transmission', protocol: 'Torrent' },
                                 { id: 'nzbget', name: 'NZBGet', protocol: 'Usenet' }
                             ].map((client) => {
                                 const isAdded = configuredClients.some(c => c.type === client.id);
